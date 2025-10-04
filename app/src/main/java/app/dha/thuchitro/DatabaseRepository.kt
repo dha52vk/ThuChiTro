@@ -1,20 +1,13 @@
 package app.dha.thuchitro
 
-import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
+import app.dha.thuchitro.utils.format
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
-import com.google.type.DateTime
-import java.text.SimpleDateFormat
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Calendar
-import java.util.Locale
-import kotlin.collections.map
 
 class DatabaseRepository(private val db: FirebaseFirestore) {
     val TAG = "Firestore"
@@ -26,51 +19,61 @@ class DatabaseRepository(private val db: FirebaseFirestore) {
         return db.collection("users")
     }
 
-    fun addRecord(month: Int, year: Int, record: RecordInfo){
+    fun addRecord(month: Int, year: Int, content: String, amount: Long, onSuccess: () -> Unit = {}){
         val current = Timestamp.now().toDate()
-        val formatter = SimpleDateFormat("yyMMdd_HHmmss", Locale.getDefault())
-        val recordId = formatter.format(current)
+        val recordId = current.format("yyyyMMdd_HHmmss")
         db.collection("records")
             .document("Y$year")
             .collection("M$month")
             .document(recordId)
             .set(hashMapOf(
                 "NgayTao" to Timestamp.now(),
-                "NoiDung" to record.content,
-                "SoTien" to record.amount,
+                "NoiDung" to content,
+                "SoTien" to amount,
                 "UserId" to AppCache.userId
             )).addOnSuccessListener {
-                Log.d(TAG, "addRecord: ${record.content}")
+                onSuccess()
+                Log.d(TAG, "addRecord: ${content}")
             }.addOnFailureListener {
-                Log.e(TAG, "addRecord: Failed to add ${record.content}", )
+                Log.e(TAG, "addRecord: Failed to add ${content}", )
             }
     }
 
-    fun editRecord(month: Int, year:Int, recordId: String, record: RecordInfo){
-        if (AppCache.userId != record.userId)
-            throw IllegalAccessError("It is not your record!")
+    fun editRecord(recordId: String, record: RecordInfo, onSuccess: () -> Unit = {}){
+        val cal = Calendar.getInstance().apply { time = record.dateCreated }
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
         db.collection("records")
             .document("Y$year")
             .collection("M$month")
             .document(recordId)
             .set(hashMapOf(
-                "NoiDung" to record.content,
+                "NoiDung" to record.details,
                 "SoTien" to record.amount,
             ), SetOptions.merge())
             .addOnSuccessListener {
-                Log.d(TAG, "editRecord: ${record.content}")
+                onSuccess()
+                Log.d(TAG, "editRecord: ${record.details}")
             }.addOnFailureListener {
-                Log.e(TAG, "editRecord: Failed to edit ${record.content}", )
+                Log.e(TAG, "editRecord: Failed to edit ${record.details}", )
             }
     }
 
-    fun removeRecord(month: Int, year: Int, recordId: String){
+    fun removeRecord(record: RecordInfo, onSuccess: () -> Unit = {}){
+        val cal = Calendar.getInstance().apply { time = record.dateCreated }
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
+        removeRecord(month, year, record.id, onSuccess)
+    }
+
+    fun removeRecord(month: Int, year: Int, recordId: String, onSuccess: () -> Unit = {}){
         db.collection("records")
             .document("Y$year")
             .collection("M$month")
             .document(recordId)
             .delete()
             .addOnSuccessListener {
+                onSuccess()
                 Log.d(TAG, "Document successfully deleted!")
             }
             .addOnFailureListener { e ->
@@ -84,7 +87,6 @@ class DatabaseRepository(private val db: FirebaseFirestore) {
             .collection("M$month")
 
         if (userId != null) query = query.whereEqualTo("UserId", userId)
-        query.orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
-        return query
+        return query.orderBy("NgayTao", Query.Direction.DESCENDING)
     }
 }

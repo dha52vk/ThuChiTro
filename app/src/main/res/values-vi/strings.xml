@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quản lý chi tiêu</string>
+    <string name="home">Trang chủ</string>
+    <string name="add">Thêm</string>
+    <string name="profile">Hồ sơ</string>
+    <string name="search_placeholder">Tìm kiếm...</string>
+    <string name="all_user">Tất cả người dùng</string>
+    <string name="calc_total_transactions">Tổng tất cả thu chi</string>
+    <string name="no_record_title">Không có bản ghi nào!</string>
+    <string name="not_signed_in">Chưa đăng nhập</string>
+    <string name="edited">Đã chỉnh sửa</string>
+    <string name="removed">Đã xóa</string>
+    <string name="total_transactions_month_title">"Tổng thu chi tháng "</string>
+    <string name="name">Tên</string>
+    <string name="total">Tổng</string>
+    <string name="receive">Nhận</string>
+    <string name="unknown">Không xác định</string>
+    <string name="average">Trung bình</string>
+    <string name="no_transactions_title">Không có giao dịch trong tháng này</string>
+    <string name="close">Đóng</string>
+    <string name="confirm">Xác nhận</string>
+    <string name="reset">Đặt lại</string>
+    <string name="details_title">Chi tiết</string>
+    <string name="amount_title">Số tiền</string>
+    <string name="short_expense_title">Chi</string>
+    <string name="short_income_title">Thu</string>
+    <string name="cancel">Hủy</string>
+    <string name="invalid_input">Đầu vào không hợp lệ</string>
+    <string name="confirm_remove_record_title">Bạn có chắc chắn muốn xóa bản ghi này không?</string>
+    <string name="edit">Chỉnh sửa</string>
+    <string name="remove">Xóa</string>
+    <string name="added">Đã thêm</string>
+    <string name="sign_out">Đăng xuất</string>
+    <string name="sign_in_success">Đăng nhập thành công</string>
+    <string name="error_signin_google">Đã xảy ra lỗi khi đăng nhập Google</string>
+    <string name="sign_in_with_google">Đăng nhập với Google</string>
+</resources>

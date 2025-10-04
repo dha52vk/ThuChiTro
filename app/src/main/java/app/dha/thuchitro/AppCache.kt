@@ -7,7 +7,9 @@ import com.google.firebase.auth.FirebaseAuth
 object AppCache {
     private var _userId: String? = null
     val userId: String
-        get() = _userId ?: "UserId chưa được set"
+        get() = if (_userId.isNullOrEmpty()) "UserId chưa được set" else _userId!!
+    val signedIn: Boolean
+        get() = !_userId.isNullOrEmpty()
 
     fun setUserId(id: String) {
         if (_userId == null) {

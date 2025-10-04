@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.map
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 import java.time.LocalDateTime
@@ -15,8 +16,9 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
     private val _records = MutableLiveData<List<RecordInfo>>()
     val records: LiveData<List<RecordInfo>> get() = _records
 
-    private val _uid = MutableLiveData<String>()
-    val uid: LiveData<String> get() = _uid
+    private val _uid = MutableLiveData<String?>()
+    val uid: LiveData<String> get() = _uid.map { if (it.isNullOrEmpty()) "Chưa đăng nhập" else it}
+    val signedIn: LiveData<Boolean> get() = _uid.map { !it.isNullOrEmpty() }
     private val _users = MutableLiveData<Map<String, String>>()
     val users: LiveData<Map<String, String>> get() = _users
 
@@ -27,13 +29,32 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
             AppCache.setUserId(uid)
             loadRecords()
         }else{
-            _uid.postValue("Chưa đăng nhập")
+            _uid.postValue("")
         }
     }
 
-    fun addRecord(record: RecordInfo){
+    fun signOut(){
+        auth.signOut()
+        _uid.postValue("Chưa đăng nhập")
+        AppCache.setUserId("")
+        _records.postValue(emptyList())
+    }
+
+    fun addRecord(content: String, amount: Long, onAdded: () -> Unit = {}){
         val current = LocalDateTime.now()
-        repo.addRecord(current.month.value, current.year, record)
+        repo.addRecord(current.month.value, current.year, content, amount, onAdded)
+    }
+
+    fun editRecord(recordId: String, record: RecordInfo, onEditted: () -> Unit = {}){
+        repo.editRecord(recordId, record, onEditted)
+    }
+
+    fun removeRecord(record: RecordInfo, onRemove: () -> Unit = {}){
+        repo.removeRecord(record, onRemove)
+    }
+
+    fun removeRecord(month: Int, year: Int, recordId: String, onRemove: () -> Unit = {}){
+        repo.removeRecord(month, year, recordId, onRemove)
     }
 
     private var registration: ListenerRegistration? = null
@@ -56,6 +77,7 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
             }
             _users.postValue(uids)
 
+            _records.postValue(emptyList())
             registration = query
                 .addSnapshotListener { snapshot, e ->
                     if (e != null){
@@ -75,7 +97,7 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
                         }
                         record
                     })
-                    Log.i(TAG, "loadRecords: Loaded ${_records.value?.size ?: 0} records")
+                    Log.i(TAG, "loadRecords: Loaded ${_records.value?.size ?: 0} records", Exception("Call stack"))
                 }
         }
     }
