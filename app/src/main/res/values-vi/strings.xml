@@ -35,4 +35,6 @@
     <string name="sign_in_success">Đăng nhập thành công</string>
     <string name="error_signin_google">Đã xảy ra lỗi khi đăng nhập Google</string>
     <string name="sign_in_with_google">Đăng nhập với Google</string>
+    <string name="copied_id">ID đã được sao chép!</string>
+    <string name="your_id_label">Id của bạn: %1$s</string>
 </resources>

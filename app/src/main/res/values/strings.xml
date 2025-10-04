@@ -1,5 +1,4 @@
 <resources>
-    <string name="default_web_client_id" translatable="false">834655526443-43271ni4ikluek3fcmfft24uoaktdvua.apps.googleusercontent.com</string>
     <string name="app_name">Expense Management</string>
     <string name="home">Home</string>
     <string name="add">Add</string>
@@ -35,6 +34,6 @@
     <string name="sign_in_success">Sign in success</string>
     <string name="error_signin_google">"Error when sign in by Google "</string>
     <string name="sign_in_with_google">Sign in with Google</string>
-    <string name="copied_id">ID đã được sao chép!</string>
-    <string name="your_id_label">Id của bạn: %1$s</string>
+    <string name="copied_id">Copied ID!</string>
+    <string name="your_id_label">Your ID: %1$s</string>
 </resources>
