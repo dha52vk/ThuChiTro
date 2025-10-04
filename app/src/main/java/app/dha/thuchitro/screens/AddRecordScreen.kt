@@ -13,23 +13,30 @@ import app.dha.thuchitro.R
 import app.dha.thuchitro.RecordsViewModel
 
 @Composable
-fun AddRecordScreen(viewModel: RecordsViewModel, onDismiss: () -> Unit){
+fun AddRecordScreen(viewModel: RecordsViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val signedIn by viewModel.signedIn.observeAsState(false)
-    var hide by remember { mutableStateOf(false) }
-    if (signedIn && !hide) {
+    if (signedIn) {
         EditRecordDialog(
             onDismissRequest = onDismiss,
             onEditClick = { content, amount ->
-                viewModel.addRecord(content, amount, onAdded = {
-                    Toast.makeText(context, context.getString(R.string.added), Toast.LENGTH_SHORT).show()
-                })
-                hide = true
+                viewModel.addRecord(
+                    content,
+                    amount,
+                    onAdded = {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.added),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onFailed = { e ->
+                        Toast.makeText(context, e.message, Toast.LENGTH_SHORT).show()
+                    })
                 onDismiss()
             }
         )
-    }else {
-        Toast.makeText(context, stringResource(R.string.not_signed_in), Toast.LENGTH_SHORT).show()
+    } else {
         onDismiss()
     }
 }

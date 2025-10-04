@@ -19,7 +19,7 @@ class DatabaseRepository(private val db: FirebaseFirestore) {
         return db.collection("users")
     }
 
-    fun addRecord(month: Int, year: Int, content: String, amount: Long, onSuccess: () -> Unit = {}){
+    fun addRecord(month: Int, year: Int, content: String, amount: Long, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
         val current = Timestamp.now().toDate()
         val recordId = current.format("yyyyMMdd_HHmmss")
         db.collection("records")
@@ -33,13 +33,12 @@ class DatabaseRepository(private val db: FirebaseFirestore) {
                 "UserId" to AppCache.userId
             )).addOnSuccessListener {
                 onSuccess()
-                Log.d(TAG, "addRecord: ${content}")
-            }.addOnFailureListener {
-                Log.e(TAG, "addRecord: Failed to add ${content}", )
+            }.addOnFailureListener { e ->
+                onFailed(e)
             }
     }
 
-    fun editRecord(recordId: String, record: RecordInfo, onSuccess: () -> Unit = {}){
+    fun editRecord(recordId: String, record: RecordInfo, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
         val cal = Calendar.getInstance().apply { time = record.dateCreated }
         val year = cal.get(Calendar.YEAR)
         val month = cal.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
@@ -53,20 +52,19 @@ class DatabaseRepository(private val db: FirebaseFirestore) {
             ), SetOptions.merge())
             .addOnSuccessListener {
                 onSuccess()
-                Log.d(TAG, "editRecord: ${record.details}")
-            }.addOnFailureListener {
-                Log.e(TAG, "editRecord: Failed to edit ${record.details}", )
+            }.addOnFailureListener { e->
+                onFailed(e)
             }
     }
 
-    fun removeRecord(record: RecordInfo, onSuccess: () -> Unit = {}){
+    fun removeRecord(record: RecordInfo, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
         val cal = Calendar.getInstance().apply { time = record.dateCreated }
         val year = cal.get(Calendar.YEAR)
         val month = cal.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-        removeRecord(month, year, record.id, onSuccess)
+        removeRecord(month, year, record.id, onSuccess, onFailed)
     }
 
-    fun removeRecord(month: Int, year: Int, recordId: String, onSuccess: () -> Unit = {}){
+    fun removeRecord(month: Int, year: Int, recordId: String, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
         db.collection("records")
             .document("Y$year")
             .collection("M$month")
@@ -74,10 +72,9 @@ class DatabaseRepository(private val db: FirebaseFirestore) {
             .delete()
             .addOnSuccessListener {
                 onSuccess()
-                Log.d(TAG, "Document successfully deleted!")
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "Error deleting document", e)
+                onFailed(e)
             }
     }
 

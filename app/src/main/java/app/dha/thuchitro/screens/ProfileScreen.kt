@@ -1,15 +1,11 @@
 package app.dha.thuchitro.screens
 
 import android.app.Activity
-import android.app.AlertDialog
-import android.content.Context
-import android.util.Log
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -44,11 +41,11 @@ fun ProfileScreen(viewModel: RecordsViewModel) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
-    val uid by viewModel.uid.observeAsState()
+    val uid by viewModel.uid.observeAsState(context.getString(R.string.unknown))
     val signedIn by viewModel.signedIn.observeAsState(false)
 
     val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-        .requestIdToken("834655526443-43271ni4ikluek3fcmfft24uoaktdvua.apps.googleusercontent.com") // Lấy từ google-services.json
+        .requestIdToken(context.getString(R.string.default_web_client_id))
         .requestEmail()
         .build()
 
@@ -63,18 +60,25 @@ fun ProfileScreen(viewModel: RecordsViewModel) {
         Text(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(
-                    true,
-                    onClick = {},
-                    onLongClick = {
-                        clipboardManager.setText(
-                            AnnotatedString(
-                                AppCache.userId
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = {
+                            clipboardManager.setText(
+                                AnnotatedString(
+                                    AppCache.userId
+                                )
                             )
-                        )
-                    })
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.copied_id), Toast.LENGTH_SHORT
+                                )
+                                .show()
+                        },
+                    )
+                }
                 .padding(10.dp),
-            text = "Id của bạn: $uid"
+            text = stringResource(R.string.your_id_label, uid)
         )
 
         if (signedIn) {
@@ -84,7 +88,13 @@ fun ProfileScreen(viewModel: RecordsViewModel) {
                     .padding(10.dp),
                 onClick = {
                     viewModel.signOut()
-                    Toast.makeText(context, context.getString(R.string.not_signed_in), Toast.LENGTH_SHORT).show()
+                    googleSignInClient.signOut().addOnCompleteListener {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.not_signed_in),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }) {
                 Text(stringResource(R.string.sign_out))
             }

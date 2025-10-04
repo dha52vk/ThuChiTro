@@ -54,6 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -65,7 +67,7 @@ import app.dha.thuchitro.utils.toVndCurrency
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.util.Date
+import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs
 
@@ -193,8 +195,7 @@ fun HomeScreen(viewModel: RecordsViewModel) {
                         }
                     }
                 }
-            }
-            else {
+            } else {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -237,14 +238,19 @@ fun HomeScreen(viewModel: RecordsViewModel) {
                     record.amount = amount
                     viewModel.editRecord(
                         record.id, record,
-                        onEditted = {
+                        onEdited = {
                             viewModel.loadRecords(
                                 userIdFilter,
                                 dateFilter?.first,
                                 dateFilter?.second
                             )
-                            Toast.makeText(context,
-                                context.getString(R.string.edited), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.edited), Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onFailed = { e ->
+                            Toast.makeText(context, e.message, Toast.LENGTH_SHORT).show()
                         })
                     selectedRecord = null
                 }
@@ -263,8 +269,12 @@ fun HomeScreen(viewModel: RecordsViewModel) {
                             dateFilter?.first,
                             dateFilter?.second
                         )
-                        Toast.makeText(context,
-                            context.getString(R.string.removed), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.removed), Toast.LENGTH_SHORT
+                        ).show()
+                    }, onFailed = {
+                        Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show()
                     })
                     selectedRecord = null
                 }
@@ -283,7 +293,6 @@ fun MonthTotalButton(
     userIdFilter: String? = null,
     dateFilter: Pair<Int, Int>
 ) {
-    val context = LocalContext.current
     var showDialog by remember { mutableStateOf(false) }
 
     Button(
@@ -350,7 +359,8 @@ fun MonthTotalButton(
                                     Row(modifier = Modifier.fillMaxWidth()) {
                                         Text(
                                             modifier = Modifier.weight(1f),
-                                            text = users[userId] ?: stringResource(R.string.unknown),
+                                            text = users[userId]
+                                                ?: stringResource(R.string.unknown),
                                         )
                                         Text(
                                             text = total.toVndCurrency(),
@@ -486,10 +496,15 @@ fun SelectDateButton(
                     TextButton(onClick = {
                         showDatePicker = false
                         datePickerState.selectedDateMillis?.let {
-                            val date = Date(it)
+                            val calendar = Calendar.getInstance().apply { timeInMillis = it }
                             val simpleDateFormat = SimpleDateFormat("MM/yyyy", Locale.getDefault())
-                            selectedDate = simpleDateFormat.format(date)
-                            onDateSelected(Pair(date.month + 1, date.year + 1900))
+                            selectedDate = simpleDateFormat.format(calendar.time)
+                            onDateSelected(
+                                Pair(
+                                    calendar.get(Calendar.MONTH) + 1,
+                                    calendar.get(Calendar.YEAR)
+                                )
+                            )
                         }
                     }) {
                         Text(text = stringResource(R.string.confirm))
@@ -630,7 +645,7 @@ fun EditRecordDialog(
 ) {
     val context = LocalContext.current
     var noiDung by remember { mutableStateOf(record?.details ?: "") }
-    var soTien by remember { mutableStateOf(record?.amount?.toString() ?: "") }
+    var soTien by remember { mutableStateOf(if (record != null) abs(record.amount).toString() else "") }
 
     Dialog(onDismissRequest = onDismissRequest) {
         Box(
@@ -649,7 +664,13 @@ fun EditRecordDialog(
                     label = { Text(stringResource(R.string.details_title)) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp)
+                        .padding(bottom = 16.dp),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        autoCorrectEnabled = true,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Unspecified
+                    )
                 )
                 TextField(
                     value = soTien,
@@ -661,12 +682,15 @@ fun EditRecordDialog(
                         .padding(bottom = 24.dp)
                 )
 
-                val options = listOf(stringResource(R.string.short_expense_title),
+                val options = listOf(
+                    stringResource(R.string.short_expense_title),
                     stringResource(R.string.short_income_title)
                 )
                 var selectedOption by remember {
                     mutableStateOf(
-                        if ((record?.amount ?: 0) > 0) context.getString(R.string.short_income_title)
+                        if ((record?.amount
+                                ?: 0) > 0
+                        ) context.getString(R.string.short_income_title)
                         else context.getString(R.string.short_expense_title)
                     )
                 }
@@ -717,13 +741,17 @@ fun EditRecordDialog(
                             try {
                                 onEditClick(
                                     noiDung,
-                                    if (selectedOption == context.getString(R.string.short_income_title)) abs(soTien.toLong()) else -abs(
+                                    if (selectedOption == context.getString(R.string.short_income_title)) abs(
+                                        soTien.toLong()
+                                    ) else -abs(
                                         soTien.toLong()
                                     )
                                 )
                             } catch (_: Exception) {
-                                Toast.makeText(context,
-                                    context.getString(R.string.invalid_input), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.invalid_input), Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }) {
                         Text(

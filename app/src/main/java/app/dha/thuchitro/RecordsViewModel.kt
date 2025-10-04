@@ -37,35 +37,35 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
         auth.signOut()
         _uid.postValue("Chưa đăng nhập")
         AppCache.setUserId("")
-        _records.postValue(emptyList())
     }
 
-    fun addRecord(content: String, amount: Long, onAdded: () -> Unit = {}){
+    fun addRecord(content: String, amount: Long, onAdded: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
         val current = LocalDateTime.now()
-        repo.addRecord(current.month.value, current.year, content, amount, onAdded)
+        repo.addRecord(current.month.value, current.year, content, amount, onAdded, onFailed)
     }
 
-    fun editRecord(recordId: String, record: RecordInfo, onEditted: () -> Unit = {}){
-        repo.editRecord(recordId, record, onEditted)
+    fun editRecord(recordId: String, record: RecordInfo, onEdited: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
+        repo.editRecord(recordId, record, onEdited,onFailed)
     }
 
-    fun removeRecord(record: RecordInfo, onRemove: () -> Unit = {}){
-        repo.removeRecord(record, onRemove)
+    fun removeRecord(record: RecordInfo, onRemove: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
+        repo.removeRecord(record, onRemove, onFailed)
     }
 
-    fun removeRecord(month: Int, year: Int, recordId: String, onRemove: () -> Unit = {}){
-        repo.removeRecord(month, year, recordId, onRemove)
+    fun removeRecord(month: Int, year: Int, recordId: String, onRemove: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
+        repo.removeRecord(month, year, recordId, onRemove, onFailed)
     }
 
     private var registration: ListenerRegistration? = null
 
-    fun loadRecords(userId: String? = null, month: Int?=null, year: Int?=null) {
+    fun loadRecords(userId: String? = null, month: Int?=null, year: Int?=null, onFailed: (Exception) -> Unit = {}) {
         registration?.remove()
 
         val current = LocalDateTime.now()
         val query = repo.getAllRecords(userId, month ?: current.month.value, year ?: current.year)
         repo.getAllUsers().addSnapshotListener { snapshot, e ->
             if (e!= null){
+                onFailed(e)
                 Log.e(TAG, "loadRecords: ${e.message}", )
                 return@addSnapshotListener
             }
