@@ -1,23 +1,42 @@
 package app.dha.thuchitro.utils
 
-import org.intellij.lang.annotations.Pattern
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import java.text.DecimalFormat
-import java.text.SimpleDateFormat
 import java.time.LocalDateTime
-import java.util.Date
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-fun Long.toVndCurrency(signal: Boolean = true): String {
-    val formatter = DecimalFormat("#,###")
-
-    val symbols = formatter.decimalFormatSymbols
-    symbols.groupingSeparator = '.'
-    formatter.decimalFormatSymbols = symbols
-
-    return (if (signal && this >0) "+" else "") + formatter.format(this) + "đ"
+// --- 1. EXTENSION FORMAT NGÀY GIỜ ---
+fun LocalDateTime.format(pattern: String): String {
+    val formatter = DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    return this.format(formatter)
 }
 
-fun Date.format(pattern: String): String{
-    val formatter = SimpleDateFormat(pattern, Locale.getDefault())
-    return formatter.format(this)
+// --- 2. EXTENSION FORMAT TIỀN TỆ (HIỂN THỊ) ---
+// Dùng để hiển thị lên Text (Ví dụ: 100,000đ)
+fun Long.toVndCurrency(showSymbol: Boolean = true): String {
+    val formatted = DecimalFormat("#,###").format(this).replace(".", ",")
+    return if (showSymbol) "${formatted}đ" else formatted
+}
+
+// --- 3. HELPER FORMAT INPUT (NHẬP LIỆU) ---
+// Dùng cho TextField: Tự động thêm dấu phẩy và giữ con trỏ ở cuối
+fun formatCurrencyInput(input: TextFieldValue): TextFieldValue {
+    // 1. Xóa dấu phẩy cũ để lấy số thô
+    val rawText = input.text.replace(",", "")
+
+    // 2. Kiểm tra tính hợp lệ (chỉ chấp nhận số)
+    if (!rawText.all { it.isDigit() }) return input
+    if (rawText.isEmpty()) return input
+
+    // 3. Format lại
+    val parsed = rawText.toLongOrNull() ?: 0L
+    val formatted = DecimalFormat("#,###").format(parsed).replace(".", ",")
+
+    // 4. Trả về giá trị mới với con trỏ nằm ở cuối cùng
+    return TextFieldValue(
+        text = formatted,
+        selection = TextRange(formatted.length)
+    )
 }

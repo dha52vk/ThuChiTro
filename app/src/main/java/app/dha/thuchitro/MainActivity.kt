@@ -3,126 +3,115 @@ package app.dha.thuchitro
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import app.dha.thuchitro.screens.AddRecordScreen
+// SỬA LỖI IMPORT: Dùng RecordDialog thay vì AddRecordDialog
+import app.dha.thuchitro.screens.RecordDialog
 import app.dha.thuchitro.screens.HomeScreen
 import app.dha.thuchitro.screens.ProfileScreen
+// IMPORT THEME CỦA BẠN
 import app.dha.thuchitro.ui.theme.MyApplicationTheme
 import com.google.firebase.firestore.FirebaseFirestore
 
 class MainActivity : ComponentActivity() {
-    val repo = DatabaseRepository(FirebaseFirestore.getInstance())
-    val viewModel = RecordsViewModel(repo)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+
+        val db = FirebaseFirestore.getInstance()
+        val repo = DatabaseRepository(db)
+        val factory = RecordsViewModelFactory(repo)
+        val viewModel = ViewModelProvider(this, factory)[RecordsViewModel::class.java]
 
         setContent {
+            // SỬA LỖI THEME: Dùng MyApplicationTheme
             MyApplicationTheme {
-                MyApp(viewModel)
+                MainScreen(viewModel)
             }
         }
     }
 }
 
 @Composable
-fun MyApp(viewModel: RecordsViewModel) {
-    viewModel.loadUserId()
-    val context = LocalContext.current
-
+fun MainScreen(viewModel: RecordsViewModel) {
     val navController = rememberNavController()
-    val items = listOf(
-        Screen.Home,
-        Screen.AddRecord,
-        Screen.Profile
-    )
+    // State quản lý việc hiển thị Dialog thêm mới
+    var showAddDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
-                val currentDestination = navController
-                    .currentBackStackEntryAsState().value?.destination
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
 
-                items.forEach { screen ->
-                    NavigationBarItem(
-                        selected = currentDestination?.route == screen.route,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                // Giữ state khi chuyển tab
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            if (screen.isButton) {
-                                IconButton(
-                                    onClick = { navController.navigate(screen.route) },
-                                    modifier = Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
-                                ) {
-                                    Icon(
-                                        imageVector = screen.icon,
-                                        contentDescription = context.getString(screen.titleRes),
-                                        tint = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                }
-                            } else {
-                                Icon(screen.icon, contentDescription = context.getString(screen.titleRes))
-                            }
-                        },
-                        label = { Text(context.getString(screen.titleRes)) },
-                        alwaysShowLabel = !screen.isButton
-                    )
-                }
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                    label = { Text("Trang chủ") },
+                    selected = currentRoute == "home", // Đã fix lỗi selected
+                    onClick = {
+                        navController.navigate("home") {
+                            popUpTo("home") { inclusive = true }
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                    label = { Text("Cá nhân") },
+                    selected = currentRoute == "profile", // Đã fix lỗi selected
+                    onClick = {
+                        navController.navigate("profile") {
+                            popUpTo("home")
+                        }
+                    }
+                )
             }
         }
     ) { innerPadding ->
+
         NavHost(
             navController = navController,
-            startDestination = Screen.Home.route,
+            startDestination = "home",
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Home.route) { HomeScreen(viewModel) }
-            composable(Screen.Profile.route) { ProfileScreen(viewModel) }
-            composable(Screen.AddRecord.route) { AddRecordScreen(viewModel, onDismiss = { navController.popBackStack() }) }
+            composable("home") {
+                // Khi bấm nút Add ở HomeScreen -> set showAddDialog = true
+                HomeScreen(
+                    viewModel = viewModel,
+                    onAddClick = { showAddDialog = true }
+                )
+            }
+            composable("profile") {
+                ProfileScreen(viewModel = viewModel)
+            }
+        }
+
+        // --- DIALOG THÊM MỚI ---
+        if (showAddDialog) {
+            // SỬA TẠI ĐÂY: Đổi AddRecordDialog -> RecordDialog
+            RecordDialog(
+                viewModel = viewModel,
+                existingRecord = null, // Truyền null nghĩa là đang THÊM MỚI
+                onDismiss = { showAddDialog = false }
+            )
         }
     }
 }
 
-sealed class Screen(
-    val route: String,
-    val titleRes: Int,
-    val icon: ImageVector,
-    val isButton: Boolean = false
-) {
-    object Home : Screen("home", R.string.home, Icons.Default.Home)
-    object AddRecord : Screen("add_record", R.string.add, Icons.Default.Add, true)
-    object Profile : Screen("profile", R.string.profile, Icons.Default.Person)
+class RecordsViewModelFactory(private val repository: DatabaseRepository) : ViewModelProvider.Factory {
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(RecordsViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return RecordsViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
 }

@@ -1,16 +1,21 @@
+// Trong file RecordInfo.kt hoặc cùng file ViewModel
 package app.dha.thuchitro
 
-import java.util.Date
+import java.time.LocalDateTime
 
 data class RecordInfo(
     val id: String,
-    val dateCreated: Date,
-    var details: String,
-    var amount: Long,
-    val userName: String,
     val userId: String,
-) {
-    override fun toString(): String {
-        return "RecordInfo(id='$id', dateCreated=$dateCreated, content='$details', amount=$amount, userName='$userName', userId='$userId')"
-    }
-}
+    val userName: String,
+    val amount: Long,
+    val details: String,
+    val dateCreated: LocalDateTime,
+    val isRent: Boolean = false, // <--- TRƯỜNG MỚI ĐỂ ĐỊNH DANH
+
+    val elecIndex: Long? = null,
+    val waterIndex: Long? = null,
+    val roomPrice: Long? = null,
+    val serviceFee: Long? = null,
+    val elecPrice: Long? = null,
+    val waterPrice: Long? = null
+)

@@ -1,167 +1,207 @@
 package app.dha.thuchitro.screens
 
-import android.app.Activity
+import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.dha.thuchitro.AppCache
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
 import app.dha.thuchitro.R
 import app.dha.thuchitro.RecordsViewModel
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.auth.GoogleAuthProvider
+import coil.compose.AsyncImage
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProfileScreen(viewModel: RecordsViewModel) {
     val context = LocalContext.current
-    val scrollState = rememberScrollState()
-    val clipboardManager = LocalClipboardManager.current
-    val uid by viewModel.uid.observeAsState(context.getString(R.string.unknown))
+    val scope = rememberCoroutineScope()
+
+    // Lấy state từ ViewModel
     val signedIn by viewModel.signedIn.observeAsState(false)
+    val userName by viewModel.userName.observeAsState("Khách")
+    val userEmail by viewModel.userEmail.observeAsState("")
+    val userAvatar = viewModel.auth.currentUser?.photoUrl // URL ảnh đại diện từ Firebase User
 
-    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-        .requestIdToken(context.getString(R.string.default_web_client_id))
-        .requestEmail()
-        .build()
+    // 1. Khởi tạo Credential Manager
+    val credentialManager = remember { CredentialManager.create(context) }
 
-    val googleSignInClient = GoogleSignIn.getClient(context as Activity, gso)
-    viewModel.loadUserId()
+    // Hàm xử lý Đăng nhập với Credential Manager
+    fun performGoogleSignIn() {
+        // Lấy Web Client ID tự động từ file google-services.json
+        // Giá trị này được sinh ra tự động, không cần copy paste thủ công
+        val webClientId = context.getString(R.string.default_web_client_id)
+
+        // Cấu hình tùy chọn lấy Google ID
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false) // false: Cho phép chọn tài khoản chưa từng đăng nhập vào app
+            .setServerClientId(webClientId)
+            .setAutoSelectEnabled(true) // Tự động đăng nhập nếu chỉ có 1 tài khoản hợp lệ
+            .build()
+
+        // Tạo request
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+
+        scope.launch {
+            try {
+                // Gọi hộp thoại đăng nhập của hệ thống
+                val result = credentialManager.getCredential(
+                    request = request,
+                    context = context
+                )
+
+                val credential = result.credential
+
+                // Kiểm tra nếu credential trả về là Google ID Token
+                if (credential is CustomCredential &&
+                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    val idToken = googleIdTokenCredential.idToken
+
+                    // Gửi ID Token sang ViewModel để Firebase xác thực
+                    viewModel.signInWithGoogle(
+                        idToken = idToken,
+                        onSuccess = {
+                            Toast.makeText(context, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show()
+                        },
+                        onFailed = { e ->
+                            Toast.makeText(context, "Lỗi Firebase: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                } else {
+                    Log.e("Auth", "Loại credential không hỗ trợ: ${credential.type}")
+                }
+            } catch (e: GetCredentialException) {
+                // Xử lý lỗi (người dùng hủy, mất mạng, sai cấu hình...)
+                Log.e("Auth", "Lỗi Credential Manager: ${e.message}")
+
+                // Chỉ hiện Toast nếu lỗi không phải do người dùng tự hủy bỏ
+                if (!e.message.toString().contains("UserCanceled")) {
+                    Toast.makeText(context, "Đăng nhập thất bại. Vui lòng thử lại.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .scrollable(scrollState, Orientation.Vertical)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = {
-                            clipboardManager.setText(
-                                AnnotatedString(
-                                    AppCache.userId
-                                )
-                            )
-                            Toast
-                                .makeText(
-                                    context,
-                                    context.getString(R.string.copied_id), Toast.LENGTH_SHORT
-                                )
-                                .show()
-                        },
-                    )
-                }
-                .padding(10.dp),
-            text = stringResource(R.string.your_id_label, uid)
-        )
-
         if (signedIn) {
+            // --- GIAO DIỆN KHI ĐÃ ĐĂNG NHẬP ---
+            if (userAvatar != null) {
+                AsyncImage(
+                    model = userAvatar,
+                    contentDescription = "Avatar",
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(100.dp),
+                    tint = Color.Gray
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = userName,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = userEmail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
             Button(
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(10.dp),
-                onClick = {
-                    viewModel.signOut()
-                    googleSignInClient.signOut().addOnCompleteListener {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.not_signed_in),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }) {
-                Text(stringResource(R.string.sign_out))
+                onClick = { viewModel.signOut() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Đăng xuất")
             }
         } else {
-            GoogleSignInButton(
+            // --- GIAO DIỆN KHI CHƯA ĐĂNG NHẬP ---
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = null,
+                modifier = Modifier.size(120.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "Bạn chưa đăng nhập",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = "Đăng nhập để đồng bộ dữ liệu chi tiêu",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = { performGoogleSignIn() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp),
-                viewModel.auth, googleSignInClient,
-                { user ->
-                    viewModel.loadUserId()
-                    Toast.makeText(context,
-                        context.getString(R.string.sign_in_success), Toast.LENGTH_SHORT).show()
-                },
-                { exception ->
-//                    Log.e("TAG", "ProfileScreen: ${exception.message}")
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.error_signin_google) + "${exception.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            )
-        }
-    }
-}
-
-@Composable
-fun GoogleSignInButton(
-    modifier: Modifier = Modifier,
-    auth: FirebaseAuth,
-    googleSignInClient: GoogleSignInClient,
-    onSignInSuccess: (FirebaseUser) -> Unit,
-    onSignInFail: (Exception) -> Unit
-) {
-    val context = LocalContext.current as Activity
-
-    // Launcher để startActivityForResult trong Compose
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-                auth.signInWithCredential(credential)
-                    .addOnCompleteListener(context) { taskAuth ->
-                        if (taskAuth.isSuccessful) {
-                            taskAuth.result?.user?.let { onSignInSuccess(it) }
-                        } else {
-                            onSignInFail(taskAuth.exception ?: Exception(context.getString(R.string.unknown)))
-                        }
-                    }
-            } catch (e: Exception) {
-                onSignInFail(e)
+                    .height(50.dp)
+            ) {
+                Text("Đăng nhập bằng Google")
             }
         }
-    }
-
-    // UI Nút login
-    Button(
-        modifier = modifier,
-        onClick = {
-            val signInIntent = googleSignInClient.signInIntent
-            launcher.launch(signInIntent)
-        }) {
-        Text(stringResource(R.string.sign_in_with_google))
     }
 }

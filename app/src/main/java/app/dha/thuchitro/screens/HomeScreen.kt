@@ -1,855 +1,231 @@
 package app.dha.thuchitro.screens
 
-import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.scrollable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import app.dha.thuchitro.R
 import app.dha.thuchitro.RecordInfo
 import app.dha.thuchitro.RecordsViewModel
 import app.dha.thuchitro.utils.format
 import app.dha.thuchitro.utils.toVndCurrency
-import java.text.SimpleDateFormat
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Calendar
-import java.util.Locale
 import kotlin.math.abs
 
 @Composable
-fun HomeScreen(viewModel: RecordsViewModel) {
-    val context = LocalContext.current
+fun HomeScreen(
+    viewModel: RecordsViewModel,
+    onAddClick: () -> Unit
+) {
+    val monthList = remember { listOf("6 tháng") + (1..12).map { "Tháng $it" } }
+
+    val realTimeCal = Calendar.getInstance()
+    val realCurrentMonth = realTimeCal.get(Calendar.MONTH) + 1
+    val realCurrentYear = realTimeCal.get(Calendar.YEAR)
+
+    var selectedIndex by remember { mutableIntStateOf(realCurrentMonth) }
+    var selectedYear by remember { mutableIntStateOf(realCurrentYear) }
+
+    var editingRecord by remember { mutableStateOf<RecordInfo?>(null) }
+    var showMemberDetail by remember { mutableStateOf(false) }
+
+    var dragOffset by remember { mutableFloatStateOf(0f) }
 
     val records by viewModel.records.observeAsState(emptyList())
-    val users by viewModel.users.observeAsState(emptyMap())
     val signedIn by viewModel.signedIn.observeAsState(false)
-    val userIds by remember(users) { mutableStateOf(users.keys.toList()) }
-    var searchText by remember { mutableStateOf("") }
-    var selectedRecord by remember { mutableStateOf<RecordInfo?>(null) }
-    var userIdFilter by remember { mutableStateOf<String?>(null) }
-    var dateFilter by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val userName by viewModel.userName.observeAsState("")
+    val usersMap by viewModel.users.observeAsState(emptyMap())
 
-    val scrollRecordListState = rememberScrollState()
-    val scrollFilterRowState = rememberScrollState()
-    Column(modifier = Modifier.fillMaxSize()) {
+    val summaryData = remember(records, usersMap) {
+        val income = records.filter { it.amount > 0 }.sumOf { it.amount }
+        val expense = records.filter { it.amount < 0 }.sumOf { it.amount }
+        val netBalance = income + expense
+        val distinctUserIds = (usersMap.keys + records.map { it.userId }).distinct()
+        val memberCount = distinctUserIds.size.coerceAtLeast(1)
+        val perPerson = netBalance / memberCount
+        Triple(expense, memberCount, perPerson)
+    }
+    val (totalExpense, memberCount, perPerson) = summaryData
+
+    LaunchedEffect(selectedIndex, selectedYear, signedIn) {
         if (signedIn) {
-            Column(
-                modifier = Modifier
-                    .padding(4.dp)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    .padding(8.dp)
-            ) {
-                OutlinedTextField(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    value = searchText,
-                    onValueChange = { searchText = it },
-                    placeholder = { Text(text = stringResource(R.string.search_placeholder)) })
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(top = 5.dp)
-                            .horizontalScroll(scrollFilterRowState)
-                    ) {
-                        SelectDateButton(
-                            onDateSelected = { pair ->
-                                dateFilter = pair
-                                viewModel.loadRecords(
-                                    userId = userIdFilter,
-                                    month = dateFilter!!.first,
-                                    year = dateFilter!!.second
-                                )
-                                Toast.makeText(
-                                    context,
-                                    "Selected ${dateFilter!!.first}/${dateFilter!!.second}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            onDateReset = {
-                                viewModel.loadRecords(userIdFilter)
-                            }
-                        )
-                        FilterDropdownMenu(
-                            label = stringResource(R.string.all_user),
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "User"
-                                )
-                            },
-                            items = userIds,
-                            displayItems = users,
-                            onItemChanged = { index, id ->
-                                userIdFilter = if (index == 0) null else id
-                                viewModel.loadRecords(
-                                    userId = userIdFilter,
-                                    month = dateFilter?.first,
-                                    year = dateFilter?.second
-                                )
-                            }
-                        )
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.padding(4.dp),
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                )
-                MonthTotalButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.calc_total_transactions),
-                    records = records,
-                    users = users,
-                    userIdFilter = userIdFilter,
-                    dateFilter = dateFilter ?: Pair(
-                        LocalDateTime.now().monthValue,
-                        LocalDateTime.now().year
-                    )
-                )
-            }
-
-            if (records.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(10.dp)
-                        .scrollable(scrollRecordListState, Orientation.Vertical)
-                ) {
-                    for (record in records) {
-                        if (record.toString().contains(searchText, ignoreCase = true)) {
-                            RecordEntry(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedRecord = record }
-                                    .padding(8.dp),
-                                record
-                            )
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
-                        }
-                    }
-                }
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = stringResource(R.string.no_record_title))
-                }
-            }
-        } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = stringResource(R.string.not_signed_in))
-            }
+            val monthParam = if (selectedIndex == 0) 0 else selectedIndex
+            viewModel.loadRecords(month = monthParam, year = selectedYear)
         }
     }
-    selectedRecord?.let { record ->
-        var editDialog by remember { mutableStateOf(false) }
-        var removeDialog by remember { mutableStateOf(false) }
-        EntryDialog(
-            onDismissRequest = { selectedRecord = null },
-            onEditClick = {
-                editDialog = true
-//                    selectedRecord = null
-            },
-            onRemoveClick = {
-                removeDialog = true
-//                    selectedRecord = null
+
+    fun changeMonth(amount: Int) {
+        if (selectedIndex == 0) {
+            selectedIndex = realCurrentMonth
+            selectedYear = realCurrentYear
+            return
+        }
+        var targetMonth = selectedIndex + amount
+        var targetYear = selectedYear
+
+        if (targetMonth > 12) { targetMonth = 1; targetYear++ }
+        else if (targetMonth < 1) { targetMonth = 12; targetYear-- }
+
+        val targetTotal = targetYear * 12 + targetMonth
+        val realTotal = realCurrentYear * 12 + realCurrentMonth
+
+        if (targetTotal > realTotal) return
+
+        selectedIndex = targetMonth
+        selectedYear = targetYear
+    }
+
+    fun changeYear(amount: Int) {
+        val newYear = selectedYear + amount
+        if (newYear > realCurrentYear) return
+        selectedYear = newYear
+        if (newYear == realCurrentYear && selectedIndex > realCurrentMonth) { selectedIndex = realCurrentMonth }
+        if (selectedIndex == 0) { selectedIndex = 1 }
+    }
+
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(onClick = onAddClick, containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White) {
+                Icon(Icons.Default.Add, contentDescription = "Thêm")
             }
-        )
-        if (editDialog) {
-            EditRecordDialog(
-                record,
-                onDismissRequest = {
-                    editDialog = false
-                },
-                onEditClick = { content, amount ->
-                    editDialog = false
-                    record.details = content
-                    record.amount = amount
-                    viewModel.editRecord(
-                        record.id, record,
-                        onEdited = {
-                            viewModel.loadRecords(
-                                userIdFilter,
-                                dateFilter?.first,
-                                dateFilter?.second
-                            )
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.edited), Toast.LENGTH_SHORT
-                            ).show()
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (dragOffset > 300) changeMonth(-1)
+                            else if (dragOffset < -300) changeMonth(1)
+                            dragOffset = 0f
                         },
-                        onFailed = { e ->
-                            Toast.makeText(context, e.message, Toast.LENGTH_SHORT).show()
-                        })
-                    selectedRecord = null
-                }
-            )
-        }
-        if (removeDialog) {
-            RemoveRecordDialog(
-                onDismissRequest = {
-                    removeDialog = false
-                },
-                onRemoveClick = {
-                    removeDialog = false
-                    viewModel.removeRecord(record, onRemove = {
-                        viewModel.loadRecords(
-                            userIdFilter,
-                            dateFilter?.first,
-                            dateFilter?.second
-                        )
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.removed), Toast.LENGTH_SHORT
-                        ).show()
-                    }, onFailed = {
-                        Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show()
-                    })
-                    selectedRecord = null
-                }
-            )
-        }
-    }
-
-}
-
-@Composable
-fun MonthTotalButton(
-    modifier: Modifier = Modifier,
-    label: String,
-    records: List<RecordInfo>,
-    users: Map<String, String>,
-    userIdFilter: String? = null,
-    dateFilter: Pair<Int, Int>
-) {
-    var showDialog by remember { mutableStateOf(false) }
-
-    Button(
-        modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
-        onClick = { showDialog = true },
-    ) {
-        Text(text = label)
-    }
-
-    if (showDialog) {
-        val userTotals = remember(records) {
-            records.groupBy { it.userId }
-                .mapValues { entry -> entry.value.sumOf { it.amount } }
-        }
-        val average = remember(userTotals) {
-            if (userTotals.isNotEmpty()) userTotals.values.average().toLong() else 0L
-        }
-
-        Dialog(onDismissRequest = { showDialog = false }) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(24.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = stringResource(R.string.total_transactions_month_title) + "${dateFilter.first}/${dateFilter.second}",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        onHorizontalDrag = { change, dragAmount -> change.consume(); dragOffset += dragAmount }
                     )
-
-                    if (userTotals.isNotEmpty()) {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                modifier = Modifier.weight(1f),
-                                text = stringResource(R.string.name),
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            Text(
-                                text = stringResource(R.string.total),
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            Text(
-                                modifier = Modifier.padding(start = 20.dp),
-                                text = stringResource(R.string.receive),
-                                style = MaterialTheme.typography.labelLarge
-                            )
+                }
+        ) {
+            if (signedIn) {
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(text = "Xin chào,", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                        Text(text = userName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.height(36.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { changeYear(-1) }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null) }
+                            Text(text = "$selectedYear", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                            val canGoNextYear = selectedYear < realCurrentYear
+                            IconButton(onClick = { changeYear(1) }, enabled = canGoNextYear) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = if(canGoNextYear) MaterialTheme.colorScheme.onSurface else Color.Gray.copy(alpha = 0.3f)) }
                         }
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                        )
-                        if (userIdFilter == null) {
-                            Column(
-                                modifier = Modifier
-                                    .padding(vertical = 8.dp)
-                                    .wrapContentHeight()
-                            ) {
-                                userTotals.keys.toList().forEach { userId ->
-                                    val total = userTotals[userId] ?: 0
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        Text(
-                                            modifier = Modifier.weight(1f),
-                                            text = users[userId]
-                                                ?: stringResource(R.string.unknown),
-                                        )
-                                        Text(
-                                            text = total.toVndCurrency(),
-                                            color = if (total <= 0) Color.Red else Color.Green,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                        val receiveMoney = average.minus(total)
-                                        Text(
-                                            modifier = Modifier.padding(start = 10.dp),
-                                            text = (receiveMoney).toVndCurrency(true),
-                                            color = if (receiveMoney <= 0) Color.Red else Color.Green,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
+                    }
+                }
+            }
+
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                items(monthList.size) { index ->
+                    val isSelected = index == selectedIndex
+                    val isFutureMonth = (selectedYear == realCurrentYear && index > realCurrentMonth) || (selectedYear > realCurrentYear)
+                    FilterChip(
+                        selected = isSelected, onClick = { if (!isFutureMonth) selectedIndex = index },
+                        label = { Text(text = monthList[index], fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primaryContainer, selectedLabelColor = MaterialTheme.colorScheme.primary, disabledContainerColor = Color.Transparent, disabledLabelColor = Color.LightGray.copy(alpha = 0.5f)),
+                        border = FilterChipDefaults.filterChipBorder(enabled = !isFutureMonth, selected = isSelected, borderColor = Color.LightGray), enabled = !isFutureMonth
+                    )
+                    if (index == 0) { Spacer(modifier = Modifier.width(8.dp)); Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray)) }
+                }
+            }
+
+            val displayTimeTitle = if (selectedIndex == 0) "Dữ liệu 6 tháng gần nhất" else "Tháng $selectedIndex năm $selectedYear"
+            Text(text = displayTimeTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+            if (selectedIndex != 0 && records.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), shape = RoundedCornerShape(16.dp)) {
+                    Box(modifier = Modifier.background(brush = androidx.compose.ui.graphics.Brush.linearGradient(colors = listOf(Color(0xFFE3F2FD), Color(0xFFEDE7F6))))) {
+                        Row(modifier = Modifier.padding(vertical = 16.dp, horizontal = 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) { SummaryItem(title = "Tổng chi", amount = totalExpense, color = Color(0xFFE53935)) }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { showMemberDetail = true }.padding(vertical = 4.dp)) {
+                                Text("Thành viên ⓘ", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Surface(color = Color.White, shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp, modifier = Modifier.padding(top = 4.dp)) { Text(text = "$memberCount người", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary) }
                             }
-                        } else {
-                            UserTotalRow(
-                                users[userIdFilter],
-                                userTotals[userIdFilter] ?: 0,
-                                average
-                            )
-                        }
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            thickness = 2.dp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                        )
-                        UserTotalRow(
-                            stringResource(R.string.average),
-                            average
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                        )
-                    } else {
-                        Text(stringResource(R.string.no_transactions_title))
-                    }
-
-                    TextButton(
-                        onClick = { showDialog = false },
-                        modifier = Modifier.padding(top = 16.dp)
-                    ) {
-                        Text(stringResource(R.string.close))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun UserTotalRow(userName: String?, total: Long, average: Long? = null) {
-    val context = LocalContext.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            modifier = Modifier.weight(1f),
-            text = userName ?: context.getString(R.string.unknown),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Text(
-            text = total.toVndCurrency(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (total <= 0) Color.Red else Color.Green
-        )
-        if (average != null) {
-            val receiveMoney = average.minus(total)
-            Text(
-                modifier = Modifier.padding(start = 10.dp),
-                text = (receiveMoney).toVndCurrency(true),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (receiveMoney <= 0) Color.Red else Color.Green
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SelectDateButton(
-    modifier: Modifier = Modifier,
-    onDateSelected: (Pair<Int, Int>) -> Unit = {},
-    onDateReset: () -> Unit = {},
-    label: String = "",
-) {
-    val datePickerState = rememberDatePickerState()
-    var showDatePicker by remember {
-        mutableStateOf(false)
-    }
-    val current = LocalDateTime.now()
-    val formatter = DateTimeFormatter.ofPattern("MM/yyyy")
-    var selectedDate by remember {
-        mutableStateOf(formatter.format(current))
-    }
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable(true, onClick = { showDatePicker = true })
-                .padding(5.dp)
-                .border(
-                    1.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(15.dp)
-                )
-                .padding(horizontal = 15.dp, vertical = 10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.DateRange,
-                contentDescription = label,
-                modifier = Modifier.padding(end = 5.dp)
-            )
-            Text(text = selectedDate)
-        }
-
-
-        if (showDatePicker) {
-            DatePickerDialog(
-                onDismissRequest = {
-                    showDatePicker = false
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showDatePicker = false
-                        datePickerState.selectedDateMillis?.let {
-                            val calendar = Calendar.getInstance().apply { timeInMillis = it }
-                            val simpleDateFormat = SimpleDateFormat("MM/yyyy", Locale.getDefault())
-                            selectedDate = simpleDateFormat.format(calendar.time)
-                            onDateSelected(
-                                Pair(
-                                    calendar.get(Calendar.MONTH) + 1,
-                                    calendar.get(Calendar.YEAR)
-                                )
-                            )
-                        }
-                    }) {
-                        Text(text = stringResource(R.string.confirm))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        showDatePicker = false
-                        onDateReset()
-                    }) {
-                        Text(text = stringResource(R.string.reset))
-                    }
-                }
-            ) {
-                DatePicker(state = datePickerState)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FilterDropdownMenu(
-    modifier: Modifier = Modifier,
-    icon: @Composable () -> Unit = {},
-    label: String = "",
-    onItemChanged: (Int, String) -> Unit = { i, s -> },
-    items: List<String>? = null,
-    displayItems: Map<String, String>? = null
-) {
-
-    var expanded by remember { mutableStateOf(false) }
-    var selectedText by remember { mutableStateOf(label) }
-
-    val items = (items ?: emptyList()).toMutableList()
-        .apply { add(0, label) }
-
-    ExposedDropdownMenuBox(
-        modifier = modifier,
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
-    ) {
-        Row(
-            modifier = Modifier
-                .clickable(true, onClick = { expanded = !expanded })
-                .padding(5.dp)
-                .border(
-                    1.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(15.dp)
-                )
-                .padding(horizontal = 15.dp, vertical = 10.dp)
-        ) {
-            Box(
-                modifier
-                    .wrapContentSize()
-                    .padding(end = 5.dp)
-            ) {
-                icon()
-            }
-            Text(
-                text = selectedText,
-                maxLines = 1,
-                modifier = Modifier.wrapContentWidth()
-            )
-        }
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            items.forEachIndexed { index, item ->
-                DropdownMenuItem(
-                    text = { Text(displayItems?.get(item) ?: item) },
-                    onClick = {
-                        selectedText =
-                            if (index == 0) label else if (displayItems != null) displayItems[item]
-                                ?: "" else item
-                        onItemChanged(index, if (index == 0) "" else item)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun RecordEntry(modifier: Modifier = Modifier, record: RecordInfo) {
-    Box(
-        modifier = modifier
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                modifier = Modifier
-                    .width(40.dp)
-                    .padding(end = 10.dp),
-                painter = painterResource(if (record.amount > 0) R.drawable.money_pay else R.drawable.shopping_cart),
-                tint = MaterialTheme.colorScheme.primary,
-                contentDescription = "EntryIcon"
-            )
-            Column(
-                modifier = Modifier
-                    .padding(start = 10.dp)
-                    .weight(1f)
-            ) {
-                Text(
-                    text = record.userName,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = record.details,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Text(
-                    text = record.dateCreated.format("hh:mm - dd/MM/yyyy"),
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-            }
-            Text(
-                text = record.amount.toVndCurrency(true),
-                color = if (record.amount > 0) Color(
-                    66,
-                    179,
-                    121
-                ) else MaterialTheme.typography.bodyLarge.color,
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-    }
-}
-
-@Composable
-fun EditRecordDialog(
-    record: RecordInfo? = null,
-    onDismissRequest: () -> Unit = {},
-    onEditClick: (String, Long) -> Unit = { c, a -> }
-) {
-    val context = LocalContext.current
-    var noiDung by remember { mutableStateOf(record?.details ?: "") }
-    var soTien by remember { mutableStateOf(if (record != null) abs(record.amount).toString() else "") }
-
-    Dialog(onDismissRequest = onDismissRequest) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                TextField(
-                    value = noiDung,
-                    onValueChange = { noiDung = it },
-                    label = { Text(stringResource(R.string.details_title)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Sentences,
-                        autoCorrectEnabled = true,
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Unspecified
-                    )
-                )
-                TextField(
-                    value = soTien,
-                    onValueChange = { soTien = it },
-                    label = { Text(stringResource(R.string.amount_title)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                )
-
-                val options = listOf(
-                    stringResource(R.string.short_expense_title),
-                    stringResource(R.string.short_income_title)
-                )
-                var selectedOption by remember {
-                    mutableStateOf(
-                        if ((record?.amount
-                                ?: 0) > 0
-                        ) context.getString(R.string.short_income_title)
-                        else context.getString(R.string.short_expense_title)
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-
-                    options.forEach { text ->
-                        TextButton(
-                            onClick = { selectedOption = text },
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (selectedOption == text) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background,
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                        ) {
-                            Text(
-                                text = text,
-                                color =
-                                    if (selectedOption == text) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground,
-                            )
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) { SummaryItem(title = if (perPerson < 0) "TB Đóng" else "TB Nhận", amount = abs(perPerson), color = if (perPerson < 0) Color(0xFFE53935) else Color(0xFF43A047)) }
                         }
                     }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismissRequest) {
-                        Text(
-                            stringResource(R.string.cancel),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                    TextButton(
-                        modifier = Modifier.padding(start = 8.dp),
-                        onClick = {
-                            try {
-                                onEditClick(
-                                    noiDung,
-                                    if (selectedOption == context.getString(R.string.short_income_title)) abs(
-                                        soTien.toLong()
-                                    ) else -abs(
-                                        soTien.toLong()
-                                    )
-                                )
-                            } catch (_: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.invalid_input), Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }) {
-                        Text(
-                            stringResource(R.string.confirm),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
+            if (records.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text("Không có dữ liệu", color = Color.Gray); Text(displayTimeTitle, fontSize = 12.sp, color = Color.LightGray) } }
+            } else {
+                LazyColumn(contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(records) { record -> RecordItem(record = record, onClick = { editingRecord = record }) }
                 }
             }
         }
     }
+
+    if (editingRecord != null) { RecordDialog(viewModel = viewModel, existingRecord = editingRecord, onDismiss = { editingRecord = null }) }
+    if (showMemberDetail) { MemberDetailDialog(usersMap = usersMap, records = records, perPerson = perPerson, onDismiss = { showMemberDetail = false }) }
 }
 
-@Composable
-fun RemoveRecordDialog(
-    onDismissRequest: () -> Unit,
-    onRemoveClick: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismissRequest) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(R.string.confirm_remove_record_title),
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    TextButton(onClick = onRemoveClick) {
-                        Text(
-                            stringResource(R.string.confirm),
-                            color = Color.Red,
-                            fontSize = MaterialTheme.typography.bodyLarge.fontSize
-                        )
-                    }
-                    TextButton(onClick = onDismissRequest) {
-                        Text(
-                            stringResource(R.string.cancel),
-                            color = Color.Green,
-                            fontSize = MaterialTheme.typography.bodyLarge.fontSize
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+@Composable fun MemberDetailDialog(usersMap: Map<String, String>, records: List<RecordInfo>, perPerson: Long, onDismiss: () -> Unit) { val combinedUsers = remember(usersMap, records) { val allUserIds = usersMap.keys + records.map { it.userId }; allUserIds.distinct().map { uid -> val name = usersMap[uid] ?: records.find { it.userId == uid }?.userName ?: "Chưa đặt tên"; uid to name } }; Dialog(onDismissRequest = onDismiss) { Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth().heightIn(max = 700.dp)) { Column(modifier = Modifier.padding(16.dp)) { Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Bảng kê chi tiết", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") } }; Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) { Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Định mức:", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer); Text(text = abs(perPerson).toVndCurrency(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer) } }; LazyColumn(modifier = Modifier.padding(vertical = 8.dp)) { items(combinedUsers) { (userId, userName) -> val userPaid = records.filter { it.userId == userId }.sumOf { it.amount }; val diff = userPaid - perPerson; Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)), modifier = Modifier.padding(vertical = 6.dp).fillMaxWidth()) { Column(modifier = Modifier.padding(12.dp)) { Text(text = userName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Spacer(modifier = Modifier.height(8.dp)); Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Đã đóng:", style = MaterialTheme.typography.bodyMedium, color = Color.Gray); Text(text = abs(userPaid).toVndCurrency(showSymbol = false), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium) }; HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp).alpha(0.5f)); Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Kết quả:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold); val resultText: String; val resultColor: Color; if (diff < 0) { resultText = "Nộp thêm: ${abs(diff).toVndCurrency(showSymbol = false)}"; resultColor = Color(0xFFE53935) } else if (diff > 0) { resultText = "Nhận về: ${abs(diff).toVndCurrency(showSymbol = false)}"; resultColor = Color(0xFF43A047) } else { resultText = "Đủ (0đ)"; resultColor = Color.Gray }; Text(text = resultText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = resultColor) } } } } } } } } }
+@Composable fun SummaryItem(title: String, amount: Long, color: Color) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(text = title, style = MaterialTheme.typography.labelSmall, color = Color.Gray); Text(text = abs(amount).toVndCurrency(showSymbol = false), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = color) } }
 
+// --- RECORD ITEM ĐÃ CẬP NHẬT: HIỆN "Người tạo" NẾU LÀ MAIN RECORD ---
 @Composable
-fun EntryDialog(
-    onDismissRequest: () -> Unit,
-    onEditClick: () -> Unit,
-    onRemoveClick: () -> Unit
-) {
-    Dialog(onDismissRequest = { onDismissRequest() }) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                DialogButton(
-                    text = stringResource(R.string.edit),
-                    icon = { Icon(Icons.Default.Edit, contentDescription = "Edit") },
-                    onClick = onEditClick
-                )
-                DialogButton(
-                    text = stringResource(R.string.remove),
-                    icon = { Icon(Icons.Default.Delete, contentDescription = "Remove") },
-                    onClick = onRemoveClick
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun RowScope.DialogButton(text: String, icon: @Composable () -> Unit = {}, onClick: () -> Unit) {
-    TextButton(
+fun RecordItem(record: RecordInfo, onClick: () -> Unit) {
+    Card(
         onClick = onClick,
-        modifier = Modifier.weight(1f)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(modifier = Modifier.padding(10.dp)) { icon() }
-            Text(text)
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(when { record.isRent -> Color(0xFFE3F2FD); record.amount > 0 -> Color(0xFFE8F5E9); else -> Color(0xFFFFEBEE) }), contentAlignment = Alignment.Center) {
+                Text(text = when { record.isRent -> "🏠"; record.amount > 0 -> "💰"; else -> "💸" }, fontSize = 22.sp)
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = record.details, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = record.dateCreated.format("dd/MM HH:mm"), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    if (record.userName.isNotEmpty()) {
+                        Text(text = " • ", color = Color.Gray, fontSize = 10.sp)
+
+                        // LOGIC: Nếu có chỉ số nước -> Đây là Main Record -> Thêm chữ "Người tạo"
+                        val displayName = if (record.waterIndex != null) "Người tạo: ${record.userName}" else record.userName
+
+                        Text(text = displayName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            Text(text = record.amount.toVndCurrency(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (record.amount >= 0) Color(0xFF43A047) else Color(0xFFE53935))
         }
     }
 }

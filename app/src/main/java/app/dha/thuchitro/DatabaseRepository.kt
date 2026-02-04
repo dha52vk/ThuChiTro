@@ -1,89 +1,38 @@
 package app.dha.thuchitro
 
-import android.util.Log
-import app.dha.thuchitro.utils.format
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.FieldPath
+import com.google.android.gms.tasks.Task
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
-import java.util.Calendar
+import com.google.firebase.firestore.QuerySnapshot
 
 class DatabaseRepository(private val db: FirebaseFirestore) {
-    val TAG = "Firestore"
-    fun getUser(userId: String): Query {
-        return db.collection("users").whereEqualTo(FieldPath.documentId(), userId)
+
+    private val recordsCollection = db.collection("records")
+    private val usersCollection = db.collection("users")
+
+    // --- RECORDS (THU CHI) ---
+
+    fun getQuery(): Query {
+        return recordsCollection
     }
 
-    fun getAllUsers(): Query{
-        return db.collection("users")
+    fun addRecord(record: Map<String, Any?>): Task<DocumentReference> {
+        return recordsCollection.add(record)
     }
 
-    fun addRecord(month: Int, year: Int, content: String, amount: Long, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
-        val current = Timestamp.now().toDate()
-        val recordId = current.format("yyyyMMdd_HHmmss")
-        db.collection("records")
-            .document("Y$year")
-            .collection("M$month")
-            .document(recordId)
-            .set(hashMapOf(
-                "NgayTao" to Timestamp.now(),
-                "NoiDung" to content,
-                "SoTien" to amount,
-                "UserId" to AppCache.userId
-            )).addOnSuccessListener {
-                onSuccess()
-            }.addOnFailureListener { e ->
-                onFailed(e)
-            }
+    fun updateRecord(recordId: String, updates: Map<String, Any>): Task<Void> {
+        return recordsCollection.document(recordId).update(updates)
     }
 
-    fun editRecord(recordId: String, record: RecordInfo, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
-        val cal = Calendar.getInstance().apply { time = record.dateCreated }
-        val year = cal.get(Calendar.YEAR)
-        val month = cal.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-        db.collection("records")
-            .document("Y$year")
-            .collection("M$month")
-            .document(recordId)
-            .set(hashMapOf(
-                "NoiDung" to record.details,
-                "SoTien" to record.amount,
-            ), SetOptions.merge())
-            .addOnSuccessListener {
-                onSuccess()
-            }.addOnFailureListener { e->
-                onFailed(e)
-            }
+    fun deleteRecord(recordId: String): Task<Void> {
+        return recordsCollection.document(recordId).delete()
     }
 
-    fun removeRecord(record: RecordInfo, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
-        val cal = Calendar.getInstance().apply { time = record.dateCreated }
-        val year = cal.get(Calendar.YEAR)
-        val month = cal.get(Calendar.MONTH) + 1 // Calendar.MONTH is 0-based
-        removeRecord(month, year, record.id, onSuccess, onFailed)
-    }
+    // --- USERS (THÀNH VIÊN) ---
 
-    fun removeRecord(month: Int, year: Int, recordId: String, onSuccess: () -> Unit = {}, onFailed: (Exception) -> Unit = {}){
-        db.collection("records")
-            .document("Y$year")
-            .collection("M$month")
-            .document(recordId)
-            .delete()
-            .addOnSuccessListener {
-                onSuccess()
-            }
-            .addOnFailureListener { e ->
-                onFailed(e)
-            }
-    }
-
-    fun getAllRecords(userId: String? = null, month: Int, year: Int): Query{
-        var query: Query = db.collection("records")
-            .document("Y$year")
-            .collection("M$month")
-
-        if (userId != null) query = query.whereEqualTo("UserId", userId)
-        return query.orderBy("NgayTao", Query.Direction.DESCENDING)
+    // Chỉ lấy danh sách để hiển thị, không tự động lưu/ghi đè
+    fun getUsers(): Task<QuerySnapshot> {
+        return usersCollection.get()
     }
 }
