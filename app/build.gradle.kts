@@ -22,8 +22,8 @@ android {
         applicationId = "app.dha.thuchitro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -70,10 +70,6 @@ kotlin {
 dependencies {
     implementation(libs.play.services.auth)
     implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.play.services.auth)
-    implementation(libs.googleid)
-
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.firestore)

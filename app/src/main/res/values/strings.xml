@@ -1,4 +1,5 @@
 <resources>
+
     <string name="app_name">Expense Management</string>
     <string name="home">Home</string>
     <string name="add">Add</string>
@@ -36,4 +37,5 @@
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="copied_id">Copied ID!</string>
     <string name="your_id_label">Your ID: %1$s</string>
+    <string name="default_web_client_id">834655526443-43271ni4ikluek3fcmfft24uoaktdvua.apps.googleusercontent.com</string>
 </resources>
