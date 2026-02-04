@@ -118,22 +118,42 @@ fun RecordDialog(
 
                     if (selectedType == RecordType.RENT) {
                         RentForm(
-                            viewModel = viewModel, existingRecord = null, usersMap = usersMap, isLoading = isLoading,
+                            viewModel = viewModel,
+                            existingRecord = null,
+                            usersMap = usersMap,
+                            isLoading = isLoading,
                             onConfirmBatch = { details, eNew, wNew, room, service, ePrice, wPrice, customDate, items ->
                                 isLoading = true
                                 viewModel.addRentBatch(details, customDate, eNew, wNew, room, service, ePrice, wPrice, items, { isLoading = false; onDismiss() }, { isLoading = false; Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show() })
                             },
-                            onUpdateSingle = { _, _, _ -> },
-                            onDelete = { }, onCancel = onDismiss
+                            onDelete = { },
+                            onCancel = onDismiss
                         )
                     } else {
-                        NormalForm(selectedType, null, isLoading, { content, amount -> isLoading = true; val finalAmount = if (selectedType == RecordType.EXPENSE) -abs(amount) else abs(amount); viewModel.addRecord(content, finalAmount, onAdded = { isLoading = false; onDismiss() }, onFailed = { isLoading = false; Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show() }) }, {}, onDismiss)
+                        NormalForm(
+                            type = selectedType,
+                            existingRecord = null,
+                            isLoading = isLoading,
+                            onConfirm = { content, amount ->
+                                isLoading = true
+                                val finalAmount = if (selectedType == RecordType.EXPENSE) -abs(amount) else abs(amount)
+                                viewModel.addRecord(content, finalAmount, onAdded = { isLoading = false; onDismiss() }, onFailed = { isLoading = false; Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show() })
+                            },
+                            onDelete = {},
+                            onCancel = onDismiss
+                        )
                     }
                 }
                 else {
                     NormalForm(
-                        type = initialType, existingRecord = existingRecord, isLoading = isLoading,
-                        onConfirm = { content, amount -> isLoading = true; val finalAmount = if (initialType == RecordType.EXPENSE) -abs(amount) else abs(amount); viewModel.updateRecord(existingRecord.id, content, finalAmount, onSuccess = { isLoading = false; onDismiss(); Toast.makeText(context, "Đã cập nhật", Toast.LENGTH_SHORT).show() }, onFailed = { isLoading = false; Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show() }) },
+                        type = initialType,
+                        existingRecord = existingRecord,
+                        isLoading = isLoading,
+                        onConfirm = { content, amount ->
+                            isLoading = true
+                            val finalAmount = if (initialType == RecordType.EXPENSE) -abs(amount) else abs(amount)
+                            viewModel.updateRecord(existingRecord.id, content, finalAmount, onSuccess = { isLoading = false; onDismiss(); Toast.makeText(context, "Đã cập nhật", Toast.LENGTH_SHORT).show() }, onFailed = { isLoading = false; Toast.makeText(context, it.message, Toast.LENGTH_SHORT).show() })
+                        },
                         onDelete = { showDeleteConfirm = true },
                         onCancel = onDismiss
                     )
@@ -172,13 +192,11 @@ fun RecordDialog(
     }
 }
 
-// --- ĐÃ SỬA CĂN GIỮA TẠI ĐÂY ---
 @Composable
 fun RentDetailView(record: RecordInfo, onDelete: () -> Unit, onClose: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(colors = CardDefaults.cardColors(containerColor = if(record.amount > 0) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)), modifier = Modifier.fillMaxWidth()) {
             Column(
-                // Thêm fillMaxWidth() để Column chiếm hết chiều rộng Card -> CenterHorizontally mới hoạt động đúng
                 modifier = Modifier.padding(16.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -201,13 +219,16 @@ fun RentDetailView(record: RecordInfo, onDelete: () -> Unit, onClose: () -> Unit
         InfoRow(userLabel, record.userName)
         InfoRow("Nội dung:", record.details)
         InfoRow("Ngày tạo:", record.dateCreated.format("dd/MM/yyyy HH:mm"))
+
         if (record.elecIndex != null) {
             HorizontalDivider()
             Text("Thông tin chỉ số:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             InfoRow("Điện mới:", "${record.elecIndex}")
             InfoRow("Nước mới:", "${record.waterIndex}")
-            if (record.roomPrice != null) InfoRow("Tiền phòng:", "${record.roomPrice?.toVndCurrency()}")
-            if (record.serviceFee != null) InfoRow("Tiền dịch vụ:", "${record.serviceFee?.toVndCurrency()}")
+
+            // --- SỬA LỖI SAFE CALL: Bỏ dấu ? thừa vì đã check != null ---
+            if (record.roomPrice != null) InfoRow("Tiền phòng:", record.roomPrice.toVndCurrency())
+            if (record.serviceFee != null) InfoRow("Tiền dịch vụ:", record.serviceFee.toVndCurrency())
         }
         Spacer(modifier = Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -226,7 +247,6 @@ fun RentForm(
     usersMap: Map<String, String>,
     isLoading: Boolean,
     onConfirmBatch: (String, Long, Long, Long, Long, Long, Long, Date?, List<RentSplitItem>) -> Unit,
-    onUpdateSingle: (String, Long, Long) -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -305,11 +325,20 @@ fun RentForm(
         ActionButtons(
             isLoading = isLoading, isEditing = existingRecord != null, onCancel = onCancel, onDelete = onDelete,
             onConfirm = {
-                val eNewVal = elecNew.toLongOrNull() ?: 0L; val wNewVal = waterNew.toLongOrNull() ?: 0L; val ePriceVal = elecPrice.toLongOrNull() ?: 0L; val wPriceVal = waterPrice.toLongOrNull() ?: 0L; val roomVal = roomPrice.toLongOrNull() ?: 0L; val serviceVal = serviceFee.toLongOrNull() ?: 0L
-                val eUsed = (eNewVal - (elecOld.toLongOrNull()?:0)).coerceAtLeast(0); val wUsed = (wNewVal - (waterOld.toLongOrNull()?:0)).coerceAtLeast(0)
+                val eNewVal = elecNew.toLongOrNull() ?: 0L; val wNewVal = waterNew.toLongOrNull() ?: 0L
+                val ePriceVal = elecPrice.toLongOrNull() ?: 0L; val wPriceVal = waterPrice.toLongOrNull() ?: 0L
+                val roomVal = roomPrice.toLongOrNull() ?: 0L; val serviceVal = serviceFee.toLongOrNull() ?: 0L
+
+                // Tính toán ngay trong confirm để tránh warning "Assigned value never read"
+                val eOldVal = elecOld.toLongOrNull() ?: 0L
+                val wOldVal = waterOld.toLongOrNull() ?: 0L
+                val eUsed = (eNewVal - eOldVal).coerceAtLeast(0)
+                val wUsed = (wNewVal - wOldVal).coerceAtLeast(0)
+
                 val details = "Tiền trọ (Điện: ${eUsed}s, Nước: ${wUsed}s)"
                 val recordDate = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }.time
                 val items = subRecordStates.map { RentSplitItem(it.userId ?: "", it.amount.text) }
+
                 onConfirmBatch(details, eNewVal, wNewVal, roomVal, serviceVal, ePriceVal, wPriceVal, recordDate, items)
             },
             confirmColor = MaterialTheme.colorScheme.primary
@@ -344,7 +373,9 @@ fun SubRecordRow(state: SubRecordState, usersMap: Map<String, String>, onRemove:
             onValueChange = { newValue ->
                 val newText = newValue.text
                 val isNegative = newText.startsWith("-")
-                val cleanText = newText.replace(Regex("[^\\d]"), "")
+                // --- SỬA REGEX: [^\d] -> \D ---
+                val cleanText = newText.replace(Regex("\\D"), "")
+
                 if (cleanText.isEmpty()) { state.amount = if (isNegative) TextFieldValue("-", TextRange(1)) else TextFieldValue("") }
                 else { val formatted = formatCurrencyInput(TextFieldValue(cleanText, TextRange(cleanText.length))); val finalText = if (isNegative) "-${formatted.text}" else formatted.text; state.amount = TextFieldValue(finalText, TextRange(finalText.length)) }
             },
@@ -358,7 +389,7 @@ fun SubRecordRow(state: SubRecordState, usersMap: Map<String, String>, onRemove:
     }
 }
 
-@Composable fun NormalForm(type: RecordType, existingRecord: RecordInfo?, isLoading: Boolean, onConfirm: (String, Long) -> Unit, onDelete: () -> Unit, onCancel: () -> Unit) { var content by remember { mutableStateOf(existingRecord?.details ?: "") }; var amountInput by remember { val initVal = if (existingRecord != null) abs(existingRecord.amount).toVndCurrency(showSymbol = false) else ""; mutableStateOf(TextFieldValue(initVal)) }; val color = if (type == RecordType.EXPENSE) Color(0xFFE53935) else Color(0xFF43A047); Column { OutlinedTextField(value = amountInput, onValueChange = { amountInput = formatCurrencyInput(it) }, label = { Text(stringResource(R.string.amount_title)) }, textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = color), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true, suffix = { Text("đ") }); Spacer(modifier = Modifier.height(16.dp)); OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text(stringResource(R.string.details_title)) }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)); Spacer(modifier = Modifier.height(32.dp)); ActionButtons(isLoading = isLoading, isEditing = existingRecord != null, onCancel = onCancel, onDelete = onDelete, onConfirm = { val rawAmount = amountInput.text.replace(",", "").toLongOrNull() ?: 0L; if (content.isBlank() || rawAmount <= 0) { } else { onConfirm(content, rawAmount) } }, confirmColor = color) } }
+@Composable fun NormalForm(type: RecordType, existingRecord: RecordInfo?, isLoading: Boolean, onConfirm: (String, Long) -> Unit, onDelete: () -> Unit, onCancel: () -> Unit) { var content by remember { mutableStateOf(existingRecord?.details ?: "") }; var amountInput by remember { val initVal = if (existingRecord != null) abs(existingRecord.amount).toVndCurrency(showSymbol = false) else ""; mutableStateOf(TextFieldValue(initVal)) }; val color = if (type == RecordType.EXPENSE) Color(0xFFE53935) else Color(0xFF43A047); Column { OutlinedTextField(value = amountInput, onValueChange = { amountInput = formatCurrencyInput(it) }, label = { Text(stringResource(R.string.amount_title)) }, textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = color), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true, suffix = { Text("đ") }); Spacer(modifier = Modifier.height(16.dp)); OutlinedTextField(value = content, onValueChange = { content = it }, label = { Text(stringResource(R.string.details_title)) }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)); Spacer(modifier = Modifier.height(32.dp)); ActionButtons(isLoading = isLoading, isEditing = existingRecord != null, onCancel = onCancel, onDelete = onDelete, onConfirm = { val rawAmount = amountInput.text.replace(",", "").toLongOrNull() ?: 0L; if (!content.isBlank() && rawAmount > 0) { onConfirm(content, rawAmount) } }, confirmColor = color) } }
 @Composable fun ActionButtons(isLoading: Boolean, isEditing: Boolean, onCancel: () -> Unit, onDelete: () -> Unit, onConfirm: () -> Unit, confirmColor: Color) { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { if (isEditing) { TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Xóa") }; Spacer(modifier = Modifier.weight(1f)) }; TextButton(onClick = onCancel, colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)) { Text(stringResource(R.string.cancel)) }; Spacer(modifier = Modifier.width(8.dp)); Button(onClick = onConfirm, enabled = !isLoading, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = confirmColor, contentColor = Color.White)) { if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) else Text(if (isEditing) "Cập nhật" else stringResource(R.string.confirm)) } } }
 @Composable fun SmallInput(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier = Modifier) { OutlinedTextField(value = value, onValueChange = { if (it.all { char -> char.isDigit() }) onValueChange(it) }, label = { Text(label, fontSize = 11.sp) }, modifier = modifier, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(8.dp), textStyle = MaterialTheme.typography.bodyMedium) }
 @Composable fun TypeButton(text: String, isSelected: Boolean, activeColor: Color, onClick: () -> Unit, modifier: Modifier = Modifier) { Button(onClick = onClick, modifier = modifier.padding(2.dp).fillMaxHeight(), colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color.White else Color.Transparent, contentColor = if (isSelected) activeColor else MaterialTheme.colorScheme.onSurfaceVariant), elevation = if (isSelected) ButtonDefaults.buttonElevation(defaultElevation = 2.dp) else null, shape = RoundedCornerShape(20.dp), contentPadding = PaddingValues(0.dp)) { Text(text = text, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) } }

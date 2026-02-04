@@ -6,7 +6,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QuerySnapshot
 
-class DatabaseRepository(private val db: FirebaseFirestore) {
+class DatabaseRepository(db: FirebaseFirestore) {
 
     private val recordsCollection = db.collection("records")
     private val usersCollection = db.collection("users")

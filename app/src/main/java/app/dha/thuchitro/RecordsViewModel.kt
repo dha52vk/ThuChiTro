@@ -34,7 +34,6 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
     val signedIn: LiveData<Boolean> = _signedIn
 
     private val _uid = MutableLiveData<String>()
-    val uid: LiveData<String> = _uid
 
     private val _userName = MutableLiveData<String>()
     val userName: LiveData<String> = _userName
@@ -155,7 +154,7 @@ class RecordsViewModel(private val repo: DatabaseRepository) : ViewModel() {
                             elecPrice = doc.getLong("elecPrice"),
                             waterPrice = doc.getLong("waterPrice")
                         )
-                    } catch (e: Exception) { null }
+                    } catch (_: Exception) { null }
                 }
                 _records.postValue(list)
 
